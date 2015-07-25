@@ -8,7 +8,7 @@ import (
 	"github.com/ninjasphere/go-ninja/suit"
 )
 
-// TODO: (if useful) have config handle multiple accounts
+// TODO: (if useful) make config handle multiple accounts
 
 type TweetDetails struct {
 	To      string   `json:to`
@@ -23,7 +23,7 @@ type ConfigService struct {
 func (c *ConfigService) GetActions(request *model.ConfigurationRequest) (*[]suit.ReplyAction, error) {
 	return &[]suit.ReplyAction{
 		suit.ReplyAction{
-			Label:       "Twitter for Notifications",
+			Label:       "Twitter",
 			DisplayIcon: "twitter",
 		},
 	}, nil
