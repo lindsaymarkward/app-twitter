@@ -10,15 +10,6 @@ import (
 
 // TODO: (if useful) make config handle multiple accounts
 
-// TweetDetails stores the values for one tweet or direct message
-// Number is the auto-incrementing value to add to tweets/messages so that Twitter won't reject as duplicates
-type TweetDetails struct {
-	Name    string `json:"name"`
-	Message string `json:"message"`
-	To      string `json:"to"`
-	Number  int    `json:"number,string"`
-}
-
 type ConfigService struct {
 	app *TwitterApp
 }
@@ -33,18 +24,19 @@ func (c *ConfigService) GetActions(request *model.ConfigurationRequest) (*[]suit
 	}, nil
 }
 
-// TODO - make listTweets the first screen, unless account is nil
-
 // Configure is the handler for all configuration screen requests
 func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.ConfigurationScreen, error) {
 	log.Infof("Incoming configuration request. Action:%s Data:%s", request.Action, string(request.Data))
 
 	switch request.Action {
-	case "list":
-		return c.listAccounts()
 	case "":
+		if c.app.config.Account.Username != "" {
+			return c.listTweets()
+		}
+		fallthrough
+	case "listAccounts":
 		// present the existing or new Twitter Account screen
-		if c.app.config.Username != "" {
+		if c.app.config.Account.Username != "" {
 			return c.listAccounts()
 		}
 		fallthrough
@@ -55,12 +47,16 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 		return c.editAccount(c.app.config)
 
 	case "saveAccount":
-		configData := &TwitterAppModel{}
+		configData := &AccountDetails{}
 		err := json.Unmarshal(request.Data, configData)
 		if err != nil {
 			return c.error(fmt.Sprintf("Failed to unmarshal save config request %s: %s", request.Data, err))
 		}
 
+		// check and add @ if needed
+		if len(configData.Username) > 0 && configData.Username[0] != '@' {
+			configData.Username = "@" + configData.Username
+		}
 		err = c.app.SaveAccount(*configData)
 		if err != nil {
 			return c.error(fmt.Sprintf("Could not save Twitter Account: %s", err))
@@ -82,11 +78,9 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 		if err != nil {
 			return c.error(fmt.Sprintf("Failed to unmarshal delete config request %s: %s", request.Data, err))
 		}
-
-		err = c.app.DeleteAccount(values["username"])
-		if err != nil {
-			return c.error(fmt.Sprintf("Failed to delete Twitter Account: %s", err))
-		}
+		// set username to blank, save config, load new account screen
+		c.app.config.Account.Username = ""
+		c.app.SendEvent("config", c.app.config)
 		return c.editAccount(&TwitterAppModel{})
 
 	case "confirmDeleteTweet":
@@ -103,8 +97,9 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 		if err != nil {
 			return c.error(fmt.Sprintf("Failed to unmarshal delete tweet config request %s: %s", request.Data, err))
 		}
-		// remove tweet from map
+		// remove tweet from map, save config
 		delete(c.app.config.Tweets, values["tweetName"])
+		c.app.SendEvent("config", c.app.config)
 		return c.listTweets()
 
 	case "listTweets":
@@ -119,7 +114,6 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 		if err != nil {
 			return c.error(fmt.Sprintf("Failed to unmarshal editTweet config request %s: %s", request.Data, err))
 		}
-
 		return c.editTweet(values["tweetName"])
 
 	case "saveTweet":
@@ -129,19 +123,20 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 		if err != nil {
 			return c.error(fmt.Sprintf("Failed to unmarshal save config request %s: %s", request.Data, err))
 		}
-		//		log.Infof("values: %v", values)
 
-		// TODO - check length of message
+		// TODO - check length of message (how respond? - could give error but have to start again)
 
-		// add tweet and save config
-		//		c.app.config.Tweets = append(c.app.config.Tweets, values)
+		// check and add @ to To field if needed
+		if len(values.To) > 0 && values.To[0] != '@' {
+			values.To = "@" + values.To
+		}
+
+		// add tweet and save config (make new map if no tweets exist yet)
 		if c.app.config.Tweets == nil {
 			c.app.config.Tweets = make(map[string]TweetDetails)
 		}
 		c.app.config.Tweets[values.Name] = values
 		c.app.SendEvent("config", c.app.config)
-
-		//		fmt.Printf("%#v\n\n%v\n", result, err)
 		return c.listTweets()
 
 	default:
@@ -166,7 +161,7 @@ func (c *ConfigService) error(message string) (*suit.ConfigurationScreen, error)
 		Actions: []suit.Typed{
 			suit.ReplyAction{
 				Label: "Back",
-				Name:  "list",
+				Name:  "listAccounts",
 			},
 		},
 	}, nil
@@ -185,7 +180,7 @@ func (c *ConfigService) listAccounts() (*suit.ConfigurationScreen, error) {
 						Name: "account",
 						Options: []suit.ActionListOption{
 							suit.ActionListOption{
-								Title: c.app.config.Username,
+								Title: c.app.config.Account.Username,
 							},
 						},
 						PrimaryAction: &suit.ReplyAction{
@@ -226,13 +221,15 @@ func (c *ConfigService) listAccounts() (*suit.ConfigurationScreen, error) {
 
 // listTweets is a config screen for displaying tweets with options for editing, deleting and creating new ones
 func (c *ConfigService) listTweets() (*suit.ConfigurationScreen, error) {
-
 	var tweetOptions []suit.ActionListOption
-
 	for _, tweet := range c.app.config.Tweets {
+		warning := ""
 		// create edit actions
+		if len(tweet.Message) > 137 {
+			warning = " !(TOO LONG)!"
+		}
 		tweetOptions = append(tweetOptions, suit.ActionListOption{
-			Title: tweet.Name,
+			Title: tweet.Name + warning,
 			Value: tweet.Name,
 		})
 	}
@@ -242,6 +239,10 @@ func (c *ConfigService) listTweets() (*suit.ConfigurationScreen, error) {
 			suit.Section{
 				Title: "Create or Edit Tweets",
 				Contents: []suit.Typed{
+					suit.StaticText{
+						// TODO - could improve this process if needed
+						Value: "To rename a tweet, edit it then delete the one with the old name",
+					},
 					suit.ActionList{
 						Name:    "tweetName",
 						Options: tweetOptions,
@@ -260,15 +261,15 @@ func (c *ConfigService) listTweets() (*suit.ConfigurationScreen, error) {
 			},
 		},
 		Actions: []suit.Typed{
-			suit.ReplyAction{
-				Label: "Back",
-				Name:  "list",
+			suit.CloseAction{
+				Label: "Close",
 			},
-			//			suit.ReplyAction{
-			//				Label:       "Tweets",
-			//				Name:        "tweets",
-			//				DisplayIcon: "twitter",
-			//			},
+			suit.ReplyAction{
+				Label:        "Accounts",
+				Name:         "listAccounts",
+				DisplayClass: "info",
+				DisplayIcon:  "at",
+			},
 			suit.ReplyAction{
 				Label:        "New Tweet",
 				Name:         "newTweet",
@@ -338,7 +339,7 @@ func (c *ConfigService) editTweet(tweetName string) (*suit.ConfigurationScreen, 
 func (c *ConfigService) editAccount(config *TwitterAppModel) (*suit.ConfigurationScreen, error) {
 
 	var title string
-	if config.Username != "" {
+	if config.Account.Username != "" {
 		title = "Editing Twitter Account"
 	} else {
 		title = "New Twitter Account"
@@ -353,7 +354,7 @@ func (c *ConfigService) editAccount(config *TwitterAppModel) (*suit.Configuratio
 						Name:        "username",
 						Before:      "Username",
 						Placeholder: "@...",
-						Value:       config.Username,
+						Value:       config.Account.Username,
 					},
 					suit.StaticText{
 						Value: "See: https://dev.twitter.com/oauth/overview/application-owner-access-tokens",
@@ -361,22 +362,22 @@ func (c *ConfigService) editAccount(config *TwitterAppModel) (*suit.Configuratio
 					suit.InputText{
 						Name:   "consumerkey",
 						Before: "Consumer Key",
-						Value:  config.ConsumerKey,
+						Value:  config.Account.ConsumerKey,
 					},
 					suit.InputText{
 						Name:   "consumersecret",
 						Before: "Consumer Secret",
-						Value:  config.ConsumerSecret,
+						Value:  config.Account.ConsumerSecret,
 					},
 					suit.InputText{
 						Name:   "accesstoken",
 						Before: "Access Token",
-						Value:  config.AccessToken,
+						Value:  config.Account.AccessToken,
 					},
 					suit.InputText{
 						Name:   "accesstokensecret",
 						Before: "Access Token Secret",
-						Value:  config.AccessTokenSecret,
+						Value:  config.Account.AccessTokenSecret,
 					},
 				},
 			},
@@ -384,7 +385,7 @@ func (c *ConfigService) editAccount(config *TwitterAppModel) (*suit.Configuratio
 		Actions: []suit.Typed{
 			suit.ReplyAction{
 				Label: "Cancel",
-				Name:  "list",
+				Name:  "listAccounts",
 			},
 			suit.ReplyAction{
 				Label:        "Save",
@@ -402,7 +403,7 @@ func (c *ConfigService) confirmDeleteAccount(id string) (*suit.ConfigurationScre
 	return &suit.ConfigurationScreen{
 		Sections: []suit.Section{
 			suit.Section{
-				Title: "Confirm Deletion of " + c.app.config.Username,
+				Title: "Confirm Deletion of " + c.app.config.Account.Username,
 				Contents: []suit.Typed{
 					suit.Alert{
 						Title:        "Do you really want to delete this Twitter Account?",
@@ -419,7 +420,7 @@ func (c *ConfigService) confirmDeleteAccount(id string) (*suit.ConfigurationScre
 		Actions: []suit.Typed{
 			suit.ReplyAction{
 				Label:       "Cancel",
-				Name:        "list",
+				Name:        "listAccounts",
 				DisplayIcon: "close",
 			},
 			suit.ReplyAction{

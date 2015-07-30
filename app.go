@@ -29,7 +29,8 @@ func (a *TwitterApp) Start(m *TwitterAppModel) error {
 	log.Infof("Starting Twitter app with config: %v", m)
 	a.config = m
 
-	a.InitTwitterAPI()
+	// TODO - get key of first one
+	a.InitTwitterAPI(a.config.Account)
 
 	a.Conn.MustExportService(&ConfigService{a}, "$app/"+a.Info.ID+"/configure", &model.ServiceAnnouncement{
 		Schema: "/protocol/configuration",
@@ -37,6 +38,7 @@ func (a *TwitterApp) Start(m *TwitterAppModel) error {
 
 	a.SetupPane()
 
+	// TODO - do I need to do this again (nothing's changed... persists?)
 	return a.SendEvent("config", a.config)
 }
 
@@ -71,25 +73,27 @@ func (a *TwitterApp) SetupPane() {
 	a.led = remote.NewMatrix(pane, conn)
 }
 
-func (a *TwitterApp) SaveAccount(data TwitterAppModel) error {
-	log.Infof("Saving username %v\n", data.Username)
-	a.config = &data
+func (a *TwitterApp) SaveAccount(account AccountDetails) error {
+	log.Infof("Saving username %v\n", account.Username)
+
+	// for multiple accounts...
+	//	if a.config.Accounts == nil {
+	//		a.config.Accounts = make(map[string]AccountDetails)
+	//	}
+	//	a.config.Accounts[account.Username] = account
+
+	a.config.Account = account
 	// create Twitter API (anaconda) object
-	a.InitTwitterAPI()
+	a.InitTwitterAPI(account)
 	return a.SendEvent("config", a.config)
 }
 
-func (a *TwitterApp) DeleteAccount(username string) error {
-	a.config.Username = ""
-	// ?? probably:
-	//	a.config = &TwitterAppModel{}
-	return a.SendEvent("config", a.config)
-}
+// TODO - multiple Twitter accounts would require multiple APIs... (just using one for now)
 
-func (a *TwitterApp) InitTwitterAPI() error {
-	anaconda.SetConsumerKey(a.config.ConsumerKey)
-	anaconda.SetConsumerSecret(a.config.ConsumerSecret)
-	a.twitterAPI = anaconda.NewTwitterApi(a.config.AccessToken, a.config.AccessTokenSecret)
+func (a *TwitterApp) InitTwitterAPI(account AccountDetails) error {
+	anaconda.SetConsumerKey(account.ConsumerKey)
+	anaconda.SetConsumerSecret(account.ConsumerSecret)
+	a.twitterAPI = anaconda.NewTwitterApi(account.AccessToken, account.AccessTokenSecret)
 	user, err := a.twitterAPI.GetSelf(nil)
 	if err != nil {
 		log.Infof("Error initialising Twitter API: %v", err)
@@ -113,8 +117,4 @@ func (a *TwitterApp) PostDirectMessage(message, user string) {
 		log.Errorf("Error sending direct message %v", err)
 	}
 	log.Infof("%v", result)
-}
-
-func (a *TwitterApp) DoThing(value string) {
-	log.Infof("Just doin' nothin' much, %v, %v", a.config.Username, value)
 }

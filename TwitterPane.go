@@ -127,7 +127,7 @@ func (p *LEDPane) Render() (*image.RGBA, error) {
 		// draw the index up the top
 		drawText(fmt.Sprintf("%2d", p.imageIndex), color.RGBA{10, 250, 250, 255}, 2, img)
 		// draw the text from app down the bottom
-		drawText(p.app.config.Username, color.RGBA{253, 151, 32, 255}, 9, img)
+		drawText(p.app.config.Account.Username, color.RGBA{253, 151, 32, 255}, 9, img)
 		// add a border to the text (you can combine multiple images/text - just keep drawing into img
 	}
 
