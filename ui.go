@@ -10,11 +10,15 @@ import (
 
 // TODO: (if useful) make config handle multiple accounts
 
+// TweetDetails stores the values for one tweet or direct message
+// Number is the auto-incrementing value to add to tweets/messages so that Twitter won't reject as duplicates
 type TweetDetails struct {
-	To      string   `json:to`
-	Message string   `json:message`
-	Options []string `json:options`
+	Name 	string `json:name`
+	Message string `json:message`
+	To      string `json:to`
+	Number  int    `json:number`
 }
+
 type ConfigService struct {
 	app *TwitterApp
 }
@@ -84,10 +88,10 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 
 		return c.edit(&TwitterAppModel{})
 
-	case "actions":
-		return c.actions()
+	case "newTweet":
+		return c.newTweet()
 
-	case "tweet":
+	case "saveTweet":
 		var values TweetDetails
 		//		var result
 		err := json.Unmarshal(request.Data, &values)
@@ -110,7 +114,7 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 			log.Infof("%v", result)
 		}
 		//		fmt.Printf("%#v\n\n%v\n", result, err)
-		return c.actions()
+		return c.newTweet()
 
 	default:
 		return c.error(fmt.Sprintf("Unknown action: %s", request.Action))
@@ -144,7 +148,7 @@ func (c *ConfigService) error(message string) (*suit.ConfigurationScreen, error)
 func (c *ConfigService) list() (*suit.ConfigurationScreen, error) {
 	// TODO: currently this displays "undefined" when there's no account; need to check
 	screen := suit.ConfigurationScreen{
-		Title: "Twitter Actions",
+		Title: "Twitter App Config",
 		Sections: []suit.Section{
 			suit.Section{
 				Title: "Edit",
@@ -153,7 +157,6 @@ func (c *ConfigService) list() (*suit.ConfigurationScreen, error) {
 						Name: "account",
 						Options: []suit.ActionListOption{
 							suit.ActionListOption{
-								//								Title: "Username",
 								Title: c.app.config.Username,
 							},
 						},
@@ -176,12 +179,12 @@ func (c *ConfigService) list() (*suit.ConfigurationScreen, error) {
 				Label: "Close",
 			},
 			suit.ReplyAction{
-				Label:       "Actions",
-				Name:        "actions",
+				Label:       "Tweets",
+				Name:        "tweets",
 				DisplayIcon: "twitter",
 			},
 			suit.ReplyAction{
-				Label:        "New Twitter Account",
+				Label:        "New Account",
 				Name:         "new",
 				DisplayClass: "success",
 				DisplayIcon:  "star",
@@ -192,9 +195,9 @@ func (c *ConfigService) list() (*suit.ConfigurationScreen, error) {
 	return &screen, nil
 }
 
-func (c *ConfigService) actions() (*suit.ConfigurationScreen, error) {
+func (c *ConfigService) newTweet() (*suit.ConfigurationScreen, error) {
 	screen := suit.ConfigurationScreen{
-		Title: "Actions",
+		Title: "New Tweet/Message",
 		Sections: []suit.Section{
 
 			// tweet!
@@ -202,26 +205,19 @@ func (c *ConfigService) actions() (*suit.ConfigurationScreen, error) {
 				Title: "Tweet!",
 				Contents: []suit.Typed{
 					suit.InputText{
-						Name:   "message",
-						Before: "Message",
-					},
-					suit.StaticText{
-						Value: "Fill in the values below to send a direct message instead of a public tweet",
+						Name:        "name",
+						Before:      "Name",
+						Placeholder: "Give this tweet/message a name to identify it",
 					},
 					suit.InputText{
-						Name:   "to",
-						Before: "To",
+						Name:        "message",
+						Before:      "Message",
+						Placeholder: "Up to 140 characters",
 					},
-					suit.OptionGroup{
-						Title: "Options",
-						Name:  "options",
-						Options: []suit.OptionGroupOption{
-							suit.OptionGroupOption{
-								Value:    "direct",
-								Title:    "Direct message?",
-								Subtitle: "Leave unticked for normal tweet",
-							},
-						},
+					suit.InputText{
+						Name:        "to",
+						Before:      "To",
+						Placeholder: "Complete the \"To\" field to make it a direct message instead of a public tweet",
 					},
 				},
 			},
@@ -232,9 +228,10 @@ func (c *ConfigService) actions() (*suit.ConfigurationScreen, error) {
 			},
 
 			suit.ReplyAction{
-				Label:       "Tweet",
-				Name:        "tweet",
-				DisplayIcon: "twitter",
+				Label:        "Save Tweet",
+				Name:         "saveTweet",
+				DisplayIcon:  "save",
+				DisplayClass: "success",
 			},
 		},
 	}
@@ -257,11 +254,6 @@ func (c *ConfigService) edit(config *TwitterAppModel) (*suit.ConfigurationScreen
 		Sections: []suit.Section{
 			suit.Section{
 				Contents: []suit.Typed{
-					// ?? Do I need hidden fields to keep access token details? I don't think so
-					//					suit.InputHidden{
-					//						Name:  "id",
-					//						Value: config.Username,
-					//					},
 					suit.InputText{
 						Name:        "username",
 						Before:      "Username",

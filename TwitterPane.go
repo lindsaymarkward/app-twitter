@@ -17,7 +17,9 @@ var introDuration = time.Millisecond * 1500
 
 // load a particular image - for a 'logo' in this case
 var imageLogo = util.LoadImage(util.ResolveImagePath("twitter-bird.png"))
-var imageAnimated = util.LoadImage(util.ResolveImagePath("twitter-animated.gif"))
+//var imageLogo = util.LoadImage(util.ResolveImagePath("twitter-bird.png"))
+//var imageAnimated = util.LoadImage(util.ResolveImagePath("twitterd.png"))
+var imageAnimated = util.LoadImage(util.ResolveImagePath("logo.png"))
 
 // LEDPane stores the data we want to access
 type LEDPane struct {
@@ -35,8 +37,7 @@ type LEDPane struct {
 	app          *TwitterApp
 }
 
-// NewDemoPane creates a DemoPane with the data and timers initialised
-// It doesn't need to do much more than create a struct if you want
+// NewLEDPane creates an LEDPane with the data and timers initialised
 // the app is passed in so that the pane can access the data and methods in it
 func NewLEDPane(a *TwitterApp) *LEDPane {
 
@@ -49,7 +50,6 @@ func NewLEDPane(a *TwitterApp) *LEDPane {
 	}
 
 	pane.introTimeout = time.AfterFunc(0, func() {
-		log.Infof("introTimeout func firing...")
 		pane.displayingIntro = false
 	})
 
@@ -85,27 +85,15 @@ func (p *LEDPane) Gesture(gesture *gestic.GestureMessage) {
 		log.Infof("Double Tap!")
 
 		p.currentImage = imageAnimated
-		//		result, err := p.app.twitterAPI.PostTweet("@lindsaymarkward is tweeting by tapping the #ninjasphere :)", nil)
-		result, err := p.app.twitterAPI.PostDMToScreenName("Bedtime :)", "@lindsaymarkward")
-		if err != nil {
-			log.Errorf("Error posting Tweet %v", err)
-		}
-		log.Infof("%v", result)
-
-		//		user, err := p.app.twitterAPI.GetSelf(nil)
-		//		if err != nil {
-		//			log.Infof("Error with Twitter API: %v", err)
-		//		}
-		//		log.Infof("Twitter API has self: %v", user.ScreenName)
-
-		// definitely shouldn't need this
-		p.app.SetupPane()
+		// TODO - learn why I need "go" here or the LED connection gets lost.
+		// "WARNING matrix RemoteMatrix.go:70 Lost connection to led controller: EOF"
+//		go p.app.PostDirectMessage("Nice one? Well, I hope so!", "@lindsaymarkward")
 	}
 }
 
 // KeepAwake is needed as it's part of the remote.pane interface
 func (p *LEDPane) KeepAwake() bool {
-	return true
+	return false
 }
 
 // IsEnabled is needed as it's part of the remote.pane interface

@@ -98,3 +98,23 @@ func (a *TwitterApp) InitTwitterAPI() error {
 	log.Infof("Initialised Twitter API with self: %v", user.ScreenName)
 	return nil
 }
+
+func (a *TwitterApp) PostTweet(tweet string) {
+	result, err := a.twitterAPI.PostTweet(tweet, nil)
+	if err != nil {
+		log.Errorf("Error posting Tweet %v", err)
+	}
+	log.Infof("%v", result)
+}
+
+func (a *TwitterApp) PostDirectMessage(message, user string) {
+	result, err := a.twitterAPI.PostDMToScreenName(message, user)
+	if err != nil {
+		log.Errorf("Error sending direct message %v", err)
+	}
+	log.Infof("%v", result)
+}
+
+func (a *TwitterApp) DoThing(value string) {
+	log.Infof("Just doin' nothin' much, %v, %v", a.config.Username, value)
+}
