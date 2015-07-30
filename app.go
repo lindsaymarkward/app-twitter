@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net"
-	"os"
 
 	"github.com/ChimeraCoder/anaconda"
 	"github.com/lindsaymarkward/go-ninja/config"
@@ -19,9 +18,10 @@ var port = config.Int(3115, "led.remote.port")
 
 type TwitterApp struct {
 	support.AppSupport
-	led        *remote.Matrix
-	config     *TwitterAppModel
-	twitterAPI *anaconda.TwitterApi
+	led         *remote.Matrix
+	config      *TwitterAppModel
+	twitterAPI  *anaconda.TwitterApi
+	Initialised bool
 }
 
 // Start is called after the ExportApp call is complete.
@@ -29,17 +29,18 @@ func (a *TwitterApp) Start(m *TwitterAppModel) error {
 	log.Infof("Starting Twitter app with config: %v", m)
 	a.config = m
 
-	// TODO - get key of first one
-	a.InitTwitterAPI(a.config.Account)
+	// initialise Twitter API and set Initialised state (don't try if account isn't set)
+	if a.config.Account.Username != "" {
+		a.InitTwitterAPI(a.config.Account)
+	} else {
+		a.Initialised = false
+	}
 
 	a.Conn.MustExportService(&ConfigService{a}, "$app/"+a.Info.ID+"/configure", &model.ServiceAnnouncement{
 		Schema: "/protocol/configuration",
 	})
 
-	a.SetupPane()
-
-	// TODO - do I need to do this again (nothing's changed... persists?)
-	return a.SendEvent("config", a.config)
+	return a.SetupPane()
 }
 
 // Stop
@@ -47,7 +48,7 @@ func (a *TwitterApp) Stop() error {
 	return nil
 }
 
-func (a *TwitterApp) SetupPane() {
+func (a *TwitterApp) SetupPane() error {
 	log.Infof("Making new pane...")
 	// The pane must implement the remote.pane interface
 	pane := NewLEDPane(a)
@@ -56,21 +57,20 @@ func (a *TwitterApp) SetupPane() {
 	log.Infof("Connecting to LED controller...")
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
-		println("ResolveTCPAddr failed:", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("ResolveTCPAddr failed: " + err.Error())
 	}
 
 	// This creates a TCP connection, conn
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
-		println("DialTCP failed:", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("DialTCP failed: " + err.Error())
 	}
 
 	log.Infof("Connected. Now making new matrix...")
 
 	// Export our pane over the TCP connection we just made
 	a.led = remote.NewMatrix(pane, conn)
+	return nil
 }
 
 func (a *TwitterApp) SaveAccount(account AccountDetails) error {
@@ -88,7 +88,7 @@ func (a *TwitterApp) SaveAccount(account AccountDetails) error {
 	return a.SendEvent("config", a.config)
 }
 
-// TODO - multiple Twitter accounts would require multiple APIs... (just using one for now)
+// TODO - multiple Twitter accounts would require multiple APIs (or switching between)... (just using one for now)
 
 func (a *TwitterApp) InitTwitterAPI(account AccountDetails) error {
 	anaconda.SetConsumerKey(account.ConsumerKey)
@@ -97,9 +97,11 @@ func (a *TwitterApp) InitTwitterAPI(account AccountDetails) error {
 	user, err := a.twitterAPI.GetSelf(nil)
 	if err != nil {
 		log.Infof("Error initialising Twitter API: %v", err)
+		a.Initialised = false
 		return err
 	}
 	log.Infof("Initialised Twitter API with self: %v", user.ScreenName)
+	a.Initialised = true
 	return nil
 }
 

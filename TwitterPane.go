@@ -12,6 +12,9 @@ import (
 	"github.com/ninjasphere/sphere-go-led-controller/util"
 )
 
+// TODO - states: error, each tweet, sending (with timer)
+// error: check API - can I draw animated red X over top of Twitter pic?
+
 var tapInterval = time.Millisecond * 500
 var introDuration = time.Millisecond * 1500
 

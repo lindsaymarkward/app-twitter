@@ -124,7 +124,8 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 			return c.error(fmt.Sprintf("Failed to unmarshal save config request %s: %s", request.Data, err))
 		}
 
-		// TODO - check length of message (how respond? - could give error but have to start again)
+		// We could check the length of the message here but giving an error would mean user had to start again
+		// So we just label it when displaying it
 
 		// check and add @ to To field if needed
 		if len(values.To) > 0 && values.To[0] != '@' {
@@ -169,7 +170,10 @@ func (c *ConfigService) error(message string) (*suit.ConfigurationScreen, error)
 
 // list is a config screen for displaying accounts with options for editing, deleting and controlling
 func (c *ConfigService) listAccounts() (*suit.ConfigurationScreen, error) {
-	// TODO: currently this displays "undefined" when there's no account; need to check
+	subtitle := ""
+	if !c.app.Initialised {
+		subtitle = "INVALID ACCOUNT!"
+	}
 	screen := suit.ConfigurationScreen{
 		Title: "Twitter App Config",
 		Sections: []suit.Section{
@@ -180,7 +184,8 @@ func (c *ConfigService) listAccounts() (*suit.ConfigurationScreen, error) {
 						Name: "account",
 						Options: []suit.ActionListOption{
 							suit.ActionListOption{
-								Title: c.app.config.Account.Username,
+								Title:    c.app.config.Account.Username,
+								Subtitle: subtitle,
 							},
 						},
 						PrimaryAction: &suit.ReplyAction{
@@ -226,11 +231,12 @@ func (c *ConfigService) listTweets() (*suit.ConfigurationScreen, error) {
 		warning := ""
 		// create edit actions
 		if len(tweet.Message) > 137 {
-			warning = " !(TOO LONG)!"
+			warning = "TOO LONG!"
 		}
 		tweetOptions = append(tweetOptions, suit.ActionListOption{
-			Title: tweet.Name + warning,
-			Value: tweet.Name,
+			Title:    tweet.Name,
+			Subtitle: warning,
+			Value:    tweet.Name,
 		})
 	}
 	screen := suit.ConfigurationScreen{
@@ -298,7 +304,7 @@ func (c *ConfigService) editTweet(tweetName string) (*suit.ConfigurationScreen, 
 						Name:        "name",
 						Before:      "Name",
 						Placeholder: "Give this tweet/message a name to identify it",
-						Value:       tweet.Name, // TODO - problem... can't just change it...
+						Value:       tweet.Name,
 					},
 					suit.InputText{
 						Name:        "message",
@@ -337,7 +343,12 @@ func (c *ConfigService) editTweet(tweetName string) (*suit.ConfigurationScreen, 
 
 // editAccount is a config screen for editing the config of a Twitter Account
 func (c *ConfigService) editAccount(config *TwitterAppModel) (*suit.ConfigurationScreen, error) {
-
+	//	var cancelClose := &suit.Typed{
+	//		suit.ReplyAction{
+	//			Label: "Cancel",
+	//			Name:  "listAccounts",
+	//		},
+	//	}
 	var title string
 	if config.Account.Username != "" {
 		title = "Editing Twitter Account"
@@ -383,9 +394,9 @@ func (c *ConfigService) editAccount(config *TwitterAppModel) (*suit.Configuratio
 			},
 		},
 		Actions: []suit.Typed{
-			suit.ReplyAction{
-				Label: "Cancel",
-				Name:  "listAccounts",
+			suit.CloseAction{
+				Label: "Close",
+				//				Name:  "listAccounts",
 			},
 			suit.ReplyAction{
 				Label:        "Save",
