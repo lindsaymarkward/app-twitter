@@ -6,7 +6,6 @@ import (
 	"image/draw"
 	"time"
 
-	"fmt"
 	"github.com/ninjasphere/gestic-tools/go-gestic-sdk"
 	"github.com/ninjasphere/sphere-go-led-controller/fonts/O4b03b"
 	"github.com/ninjasphere/sphere-go-led-controller/util"
@@ -18,24 +17,30 @@ import (
 var tapInterval = time.Millisecond * 500
 var introDuration = time.Millisecond * 1500
 
-// load a particular image - for a 'logo' in this case
+// load state images
 var imageLogo = util.LoadImage(util.ResolveImagePath("twitter-bird.png"))
 var imageAnimated = util.LoadImage(util.ResolveImagePath("twitter-animated.gif"))
+var imageError = util.LoadImage(util.ResolveImagePath("error.gif"))
+
+// states
+const (
+	Intro = iota
+	ErrorAccount
+	ErrorTweet
+	Tweeting
+	Choosing
+)
 
 // LEDPane stores the data we want to access
 type LEDPane struct {
 	lastTap         time.Time
 	lastDoubleTap   time.Time
 	lastTapLocation gestic.Location
-
-	displayingIntro bool
 	introTimeout    *time.Timer
 	visible         bool
-
-	isImageMode  bool
-	imageIndex   int
-	currentImage util.Image
-	app          *TwitterApp
+	currentImage    util.Image
+	app             *TwitterApp
+	state           int
 }
 
 // NewLEDPane creates an LEDPane with the data and timers initialised
@@ -43,15 +48,13 @@ type LEDPane struct {
 func NewLEDPane(a *TwitterApp) *LEDPane {
 
 	pane := &LEDPane{
-		lastTap:      time.Now(),
-		isImageMode:  true,
-		imageIndex:   0,
-		app:          a,
-		currentImage: imageLogo,
+		lastTap: time.Now(),
+		app:     a,
+		state:   Intro,
 	}
 
 	pane.introTimeout = time.AfterFunc(0, func() {
-		pane.displayingIntro = false
+		pane.state = Choosing
 	})
 
 	return pane
@@ -85,14 +88,16 @@ func (p *LEDPane) Gesture(gesture *gestic.GestureMessage) {
 		p.lastDoubleTap = time.Now()
 		log.Infof("Double Tap!")
 
+		// TODO - state with timer
+
 		p.currentImage = imageAnimated
-		// TODO - learn why I need "go" here or the LED connection gets lost.
-		// "WARNING matrix RemoteMatrix.go:70 Lost connection to led controller: EOF"
+		// TODO - learn why I need "go" here or the LED connection gets lost
+		// ("WARNING matrix RemoteMatrix.go:70 Lost connection to led controller: EOF")
 		//		go p.app.PostDirectMessage("Nice one? Well, I hope so!", "@lindsaymarkward")
 	}
 }
 
-// KeepAwake is needed as it's part of the remote.pane interface
+// KeepAwake sets whether the display fades (false) or not (true)
 func (p *LEDPane) KeepAwake() bool {
 	return false
 }
@@ -108,31 +113,46 @@ func (p *LEDPane) Render() (*image.RGBA, error) {
 
 	if !p.visible {
 		p.visible = true
-		p.displayingIntro = true
+		p.state = Intro
 		p.introTimeout.Reset(introDuration)
 	}
 
-	// simply return the logo image
-	if p.displayingIntro {
+	if p.state == Intro {
+		p.currentImage = imageLogo
+		// simply return the logo image
 		return imageLogo.GetNextFrame(), nil
 	}
-
 	// create an empty 16*16 RGBA image for the Draw function to draw into (to be returned)
 	img := image.NewRGBA(image.Rect(0, 0, 16, 16))
 
-	// display either images or some text
-	if p.isImageMode {
-		// set one of the images loaded at the start to be displayed
-		// Draw (built-in Go function) draws the frame from stateImg into the img 'image' starting at 4th parameter, "Over" the top
-		draw.Draw(img, img.Bounds(), p.currentImage.GetNextFrame(), image.Point{0, 0}, draw.Over)
-
+	// TODO - where's the best place for this? Update function called less frequently?
+	if !p.app.Initialised {
+		p.state = ErrorAccount
 	} else {
-		// draw the index up the top
-		drawText(fmt.Sprintf("%2d", p.imageIndex), color.RGBA{10, 250, 250, 255}, 2, img)
-		// draw the text from app down the bottom
-		drawText(p.app.config.Account.Username, color.RGBA{253, 151, 32, 255}, 9, img)
-		// add a border to the text (you can combine multiple images/text - just keep drawing into img
+		p.state = Choosing
 	}
+
+	switch p.state {
+
+	case Tweeting:
+	// animated
+	case Choosing:
+		// different tweet images/text
+		p.currentImage = imageLogo
+	case ErrorAccount:
+		// @ with cross through it
+		p.currentImage = imageError
+	case ErrorTweet:
+		// (animated?) bird with cross
+	}
+
+	// Draw (built-in Go function) draws the frame from stateImg into the img 'image' starting at 4th parameter, "Over" the top
+	draw.Draw(img, img.Bounds(), p.currentImage.GetNextFrame(), image.Point{0, 0}, draw.Over)
+
+	//	// draw the index up the top
+	//	drawText(fmt.Sprintf("%2d", p.imageIndex), color.RGBA{10, 250, 250, 255}, 2, img)
+	//	// draw the text from app down the bottom
+	//	drawText(p.app.config.Account.Username, color.RGBA{253, 151, 32, 255}, 9, img)
 
 	// return the image we've created to be rendered to the matrix
 	return img, nil
