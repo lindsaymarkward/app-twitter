@@ -13,10 +13,10 @@ import (
 // TweetDetails stores the values for one tweet or direct message
 // Number is the auto-incrementing value to add to tweets/messages so that Twitter won't reject as duplicates
 type TweetDetails struct {
-	Name 	string `json:name`
-	Message string `json:message`
-	To      string `json:to`
-	Number  int    `json:number`
+	Name    string `json:"name"`
+	Message string `json:"message"`
+	To      string `json:"to"`
+	Number  int    `json:"number,string"`
 }
 
 type ConfigService struct {
@@ -33,26 +33,28 @@ func (c *ConfigService) GetActions(request *model.ConfigurationRequest) (*[]suit
 	}, nil
 }
 
+// TODO - make listTweets the first screen, unless account is nil
+
 // Configure is the handler for all configuration screen requests
 func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.ConfigurationScreen, error) {
 	log.Infof("Incoming configuration request. Action:%s Data:%s", request.Action, string(request.Data))
 
 	switch request.Action {
 	case "list":
-		return c.list()
+		return c.listAccounts()
 	case "":
 		// present the existing or new Twitter Account screen
 		if c.app.config.Username != "" {
-			return c.list()
+			return c.listAccounts()
 		}
 		fallthrough
-	case "new":
-		return c.edit(&TwitterAppModel{})
+	case "newAccount":
+		return c.editAccount(&TwitterAppModel{})
 
-	case "edit":
-		return c.edit(c.app.config)
+	case "editAccount":
+		return c.editAccount(c.app.config)
 
-	case "save":
+	case "saveAccount":
 		configData := &TwitterAppModel{}
 		err := json.Unmarshal(request.Data, configData)
 		if err != nil {
@@ -64,32 +66,61 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 			return c.error(fmt.Sprintf("Could not save Twitter Account: %s", err))
 		}
 
-		return c.list()
+		return c.listAccounts()
 
 	case "confirmDelete":
 		var values map[string]string
 		err := json.Unmarshal(request.Data, &values)
 		if err != nil {
-			return c.error(fmt.Sprintf("Failed to unmarshal save config request %s: %s", request.Data, err))
+			return c.error(fmt.Sprintf("Failed to unmarshal confirm delete config request %s: %s", request.Data, err))
 		}
-		return c.confirmDelete(values["username"])
+		return c.confirmDeleteAccount(values["username"])
 
 	case "delete":
 		var values map[string]string
 		err := json.Unmarshal(request.Data, &values)
 		if err != nil {
-			return c.error(fmt.Sprintf("Failed to unmarshal save config request %s: %s", request.Data, err))
+			return c.error(fmt.Sprintf("Failed to unmarshal delete config request %s: %s", request.Data, err))
 		}
 
 		err = c.app.DeleteAccount(values["username"])
 		if err != nil {
 			return c.error(fmt.Sprintf("Failed to delete Twitter Account: %s", err))
 		}
+		return c.editAccount(&TwitterAppModel{})
 
-		return c.edit(&TwitterAppModel{})
+	case "confirmDeleteTweet":
+		var values map[string]string
+		err := json.Unmarshal(request.Data, &values)
+		if err != nil {
+			return c.error(fmt.Sprintf("Failed to unmarshal confirm delete tweet config request %s: %s", request.Data, err))
+		}
+		return c.confirmDeleteTweet(values["tweetName"])
+
+	case "deleteTweet":
+		var values map[string]string
+		err := json.Unmarshal(request.Data, &values)
+		if err != nil {
+			return c.error(fmt.Sprintf("Failed to unmarshal delete tweet config request %s: %s", request.Data, err))
+		}
+		// remove tweet from map
+		delete(c.app.config.Tweets, values["tweetName"])
+		return c.listTweets()
+
+	case "listTweets":
+		return c.listTweets()
 
 	case "newTweet":
-		return c.newTweet()
+		return c.editTweet("")
+
+	case "editTweet":
+		var values map[string]string
+		err := json.Unmarshal(request.Data, &values)
+		if err != nil {
+			return c.error(fmt.Sprintf("Failed to unmarshal editTweet config request %s: %s", request.Data, err))
+		}
+
+		return c.editTweet(values["tweetName"])
 
 	case "saveTweet":
 		var values TweetDetails
@@ -100,21 +131,18 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 		}
 		//		log.Infof("values: %v", values)
 
-		if contains(values.Options, "direct") {
-			result, err := c.app.twitterAPI.PostDMToScreenName(values.Message, values.To)
-			if err != nil {
-				log.Errorf("Error sending DM %v", err)
-			}
-			log.Infof("%v", result)
-		} else {
-			result, err := c.app.twitterAPI.PostTweet(values.Message, nil)
-			if err != nil {
-				log.Errorf("Error posting Tweet %v", err)
-			}
-			log.Infof("%v", result)
+		// TODO - check length of message
+
+		// add tweet and save config
+		//		c.app.config.Tweets = append(c.app.config.Tweets, values)
+		if c.app.config.Tweets == nil {
+			c.app.config.Tweets = make(map[string]TweetDetails)
 		}
+		c.app.config.Tweets[values.Name] = values
+		c.app.SendEvent("config", c.app.config)
+
 		//		fmt.Printf("%#v\n\n%v\n", result, err)
-		return c.newTweet()
+		return c.listTweets()
 
 	default:
 		return c.error(fmt.Sprintf("Unknown action: %s", request.Action))
@@ -145,13 +173,13 @@ func (c *ConfigService) error(message string) (*suit.ConfigurationScreen, error)
 }
 
 // list is a config screen for displaying accounts with options for editing, deleting and controlling
-func (c *ConfigService) list() (*suit.ConfigurationScreen, error) {
+func (c *ConfigService) listAccounts() (*suit.ConfigurationScreen, error) {
 	// TODO: currently this displays "undefined" when there's no account; need to check
 	screen := suit.ConfigurationScreen{
 		Title: "Twitter App Config",
 		Sections: []suit.Section{
 			suit.Section{
-				Title: "Edit",
+				Title: "Edit Account",
 				Contents: []suit.Typed{
 					suit.ActionList{
 						Name: "account",
@@ -161,7 +189,7 @@ func (c *ConfigService) list() (*suit.ConfigurationScreen, error) {
 							},
 						},
 						PrimaryAction: &suit.ReplyAction{
-							Name:        "edit",
+							Name:        "editAccount",
 							DisplayIcon: "pencil",
 						},
 						SecondaryAction: &suit.ReplyAction{
@@ -179,13 +207,14 @@ func (c *ConfigService) list() (*suit.ConfigurationScreen, error) {
 				Label: "Close",
 			},
 			suit.ReplyAction{
-				Label:       "Tweets",
-				Name:        "tweets",
-				DisplayIcon: "twitter",
+				Label:        "Tweets",
+				Name:         "listTweets",
+				DisplayIcon:  "twitter",
+				DisplayClass: "info",
 			},
 			suit.ReplyAction{
 				Label:        "New Account",
-				Name:         "new",
+				Name:         "newAccount",
 				DisplayClass: "success",
 				DisplayIcon:  "star",
 			},
@@ -195,38 +224,105 @@ func (c *ConfigService) list() (*suit.ConfigurationScreen, error) {
 	return &screen, nil
 }
 
-func (c *ConfigService) newTweet() (*suit.ConfigurationScreen, error) {
-	screen := suit.ConfigurationScreen{
-		Title: "New Tweet/Message",
-		Sections: []suit.Section{
+// listTweets is a config screen for displaying tweets with options for editing, deleting and creating new ones
+func (c *ConfigService) listTweets() (*suit.ConfigurationScreen, error) {
 
-			// tweet!
+	var tweetOptions []suit.ActionListOption
+
+	for _, tweet := range c.app.config.Tweets {
+		// create edit actions
+		tweetOptions = append(tweetOptions, suit.ActionListOption{
+			Title: tweet.Name,
+			Value: tweet.Name,
+		})
+	}
+	screen := suit.ConfigurationScreen{
+		Title: "Tweets",
+		Sections: []suit.Section{
 			suit.Section{
-				Title: "Tweet!",
+				Title: "Create or Edit Tweets",
 				Contents: []suit.Typed{
-					suit.InputText{
-						Name:        "name",
-						Before:      "Name",
-						Placeholder: "Give this tweet/message a name to identify it",
-					},
-					suit.InputText{
-						Name:        "message",
-						Before:      "Message",
-						Placeholder: "Up to 140 characters",
-					},
-					suit.InputText{
-						Name:        "to",
-						Before:      "To",
-						Placeholder: "Complete the \"To\" field to make it a direct message instead of a public tweet",
+					suit.ActionList{
+						Name:    "tweetName",
+						Options: tweetOptions,
+						PrimaryAction: &suit.ReplyAction{
+							Name:        "editTweet",
+							DisplayIcon: "pencil",
+						},
+						SecondaryAction: &suit.ReplyAction{
+							Name:         "confirmDeleteTweet",
+							Label:        "Delete",
+							DisplayIcon:  "trash",
+							DisplayClass: "danger",
+						},
 					},
 				},
 			},
 		},
 		Actions: []suit.Typed{
-			suit.CloseAction{
-				Label: "Close",
+			suit.ReplyAction{
+				Label: "Back",
+				Name:  "list",
 			},
+			//			suit.ReplyAction{
+			//				Label:       "Tweets",
+			//				Name:        "tweets",
+			//				DisplayIcon: "twitter",
+			//			},
+			suit.ReplyAction{
+				Label:        "New Tweet",
+				Name:         "newTweet",
+				DisplayClass: "success",
+				DisplayIcon:  "star",
+			},
+		},
+	}
+	return &screen, nil
+}
 
+func (c *ConfigService) editTweet(tweetName string) (*suit.ConfigurationScreen, error) {
+	tweet := TweetDetails{}
+	title := "New Tweet/Message"
+	if tweetName != "" {
+		title = "Edit Tweet/Message"
+		tweet = c.app.config.Tweets[tweetName]
+	}
+	screen := suit.ConfigurationScreen{
+		Title: title,
+		Sections: []suit.Section{
+			suit.Section{
+				//				Title: "Tweet",
+				Contents: []suit.Typed{
+					suit.InputText{
+						Name:        "name",
+						Before:      "Name",
+						Placeholder: "Give this tweet/message a name to identify it",
+						Value:       tweet.Name, // TODO - problem... can't just change it...
+					},
+					suit.InputText{
+						Name:        "message",
+						Before:      "Message",
+						Placeholder: "Up to 140 characters",
+						Value:       tweet.Message,
+					},
+					suit.InputText{
+						Name:        "to",
+						Before:      "To",
+						Placeholder: "Complete this field to make it a direct message instead of a public tweet",
+						Value:       tweet.To,
+					},
+					suit.InputHidden{
+						Name:  "number",
+						Value: fmt.Sprintf("%d", tweet.Number),
+					},
+				},
+			},
+		},
+		Actions: []suit.Typed{
+			suit.ReplyAction{
+				Label: "Cancel",
+				Name:  "listTweets",
+			},
 			suit.ReplyAction{
 				Label:        "Save Tweet",
 				Name:         "saveTweet",
@@ -236,11 +332,10 @@ func (c *ConfigService) newTweet() (*suit.ConfigurationScreen, error) {
 		},
 	}
 	return &screen, nil
-
 }
 
-// edit is a config screen for editing the config of a Twitter Account
-func (c *ConfigService) edit(config *TwitterAppModel) (*suit.ConfigurationScreen, error) {
+// editAccount is a config screen for editing the config of a Twitter Account
+func (c *ConfigService) editAccount(config *TwitterAppModel) (*suit.ConfigurationScreen, error) {
 
 	var title string
 	if config.Username != "" {
@@ -293,18 +388,17 @@ func (c *ConfigService) edit(config *TwitterAppModel) (*suit.ConfigurationScreen
 			},
 			suit.ReplyAction{
 				Label:        "Save",
-				Name:         "save",
+				Name:         "saveAccount",
 				DisplayClass: "success",
-				DisplayIcon:  "star",
+				DisplayIcon:  "save",
 			},
 		},
 	}
-
 	return &screen, nil
 }
 
-// confirmDelete is a config screen for confirming/cancelling deleting of Twitter Account
-func (c *ConfigService) confirmDelete(id string) (*suit.ConfigurationScreen, error) {
+// confirmDeleteAccount is a config screen for confirming/cancelling deleting of Twitter Account
+func (c *ConfigService) confirmDeleteAccount(id string) (*suit.ConfigurationScreen, error) {
 	return &suit.ConfigurationScreen{
 		Sections: []suit.Section{
 			suit.Section{
@@ -338,11 +432,46 @@ func (c *ConfigService) confirmDelete(id string) (*suit.ConfigurationScreen, err
 	}, nil
 }
 
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
+// confirmDeleteAccount is a config screen for confirming/cancelling deleting of a stored tweet/message
+func (c *ConfigService) confirmDeleteTweet(name string) (*suit.ConfigurationScreen, error) {
+	return &suit.ConfigurationScreen{
+		Sections: []suit.Section{
+			suit.Section{
+				Title: "Confirm Deletion of tweet: " + name,
+				Contents: []suit.Typed{
+					suit.Alert{
+						Title:        "Do you really want to delete this tweet?",
+						DisplayClass: "danger",
+						DisplayIcon:  "warning",
+					},
+					suit.InputHidden{
+						Name:  "tweetName",
+						Value: name,
+					},
+				},
+			},
+		},
+		Actions: []suit.Typed{
+			suit.ReplyAction{
+				Label:       "Cancel",
+				Name:        "listTweets",
+				DisplayIcon: "close",
+			},
+			suit.ReplyAction{
+				Label:        "Confirm - Delete",
+				Name:         "deleteTweet",
+				DisplayClass: "warning",
+				DisplayIcon:  "check",
+			},
+		},
+	}, nil
 }
+
+//func contains(s []string, e string) bool {
+//	for _, a := range s {
+//		if a == e {
+//			return true
+//		}
+//	}
+//	return false
+//}

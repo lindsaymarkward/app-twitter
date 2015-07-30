@@ -17,9 +17,7 @@ var introDuration = time.Millisecond * 1500
 
 // load a particular image - for a 'logo' in this case
 var imageLogo = util.LoadImage(util.ResolveImagePath("twitter-bird.png"))
-//var imageLogo = util.LoadImage(util.ResolveImagePath("twitter-bird.png"))
-//var imageAnimated = util.LoadImage(util.ResolveImagePath("twitterd.png"))
-var imageAnimated = util.LoadImage(util.ResolveImagePath("logo.png"))
+var imageAnimated = util.LoadImage(util.ResolveImagePath("twitter-animated.gif"))
 
 // LEDPane stores the data we want to access
 type LEDPane struct {
@@ -87,7 +85,7 @@ func (p *LEDPane) Gesture(gesture *gestic.GestureMessage) {
 		p.currentImage = imageAnimated
 		// TODO - learn why I need "go" here or the LED connection gets lost.
 		// "WARNING matrix RemoteMatrix.go:70 Lost connection to led controller: EOF"
-//		go p.app.PostDirectMessage("Nice one? Well, I hope so!", "@lindsaymarkward")
+		//		go p.app.PostDirectMessage("Nice one? Well, I hope so!", "@lindsaymarkward")
 	}
 }
 
