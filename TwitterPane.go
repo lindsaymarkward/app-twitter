@@ -219,18 +219,21 @@ func (p *LEDPane) UpdateStatus() {
 			}
 		}
 	}
-//	log.Infof("update. State is %v", p.state)
+	//	log.Infof("update. State is %v", p.state)
 	p.updateTimer.Reset(updateFrequency)
 }
 
-func (p *LEDPane) tweetIt(tweet TweetDetails) error {
+func (p *LEDPane) tweetIt(tweet TweetDetails) {
+	var err error
 	if tweet.To == "" {
 		// post tweet
-		go p.app.PostTweet(fmt.Sprintf("%s %d", tweet.Message, tweet.Number))
-//		log.Infof(fmt.Sprintf("%s %d", tweet.Message, tweet.Number))
+		err = p.app.PostTweet(fmt.Sprintf("%s %d", tweet.Message, tweet.Number))
+		//		log.Infof(fmt.Sprintf("%s %d", tweet.Message, tweet.Number))
 	} else {
 		// send direct message
-		go p.app.PostDirectMessage(tweet.Message, tweet.To)
+		err = p.app.PostDirectMessage(tweet.Message, tweet.To)
 	}
-	return nil
+	// handle error
+	log.Errorf(err)
+	// TODO - this isn't the right error... needs to look at result returned from Twitter
 }
