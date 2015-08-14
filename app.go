@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net"
 
 	"github.com/ChimeraCoder/anaconda"
 	"github.com/lindsaymarkward/go-ninja/config"
@@ -29,9 +28,14 @@ func (a *TwitterApp) Start(m *TwitterAppModel) error {
 	log.Infof("Starting Twitter app with config: %v", m)
 	a.config = m
 
+	// for clearing tweets (testing)
+//	a.config.TweetNames = nil
+//	a.config.Tweets = nil
+
 	// initialise Twitter API and set Initialised state (don't try if account isn't set)
 	if a.config.Account.Username != "" {
-		a.InitTwitterAPI(a.config.Account)
+		// check
+		go a.InitTwitterAPI(a.config.Account)
 	} else {
 		a.Initialised = false
 	}
@@ -53,23 +57,8 @@ func (a *TwitterApp) SetupPane() error {
 	// The pane must implement the remote.pane interface
 	pane := NewLEDPane(a)
 
-	// Connect to the LED controller remote pane interface via TCP
-	log.Infof("Connecting to LED controller...")
-	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", host, port))
-	if err != nil {
-		return fmt.Errorf("ResolveTCPAddr failed: " + err.Error())
-	}
-
-	// This creates a TCP connection, conn
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		return fmt.Errorf("DialTCP failed: " + err.Error())
-	}
-
-	log.Infof("Connected. Now making new matrix...")
-
 	// Export our pane over the TCP connection we just made
-	a.led = remote.NewMatrix(pane, conn)
+	a.led = remote.NewTCPMatrix(pane, fmt.Sprintf("%s:%d", host, port))
 	return nil
 }
 
@@ -88,7 +77,7 @@ func (a *TwitterApp) SaveAccount(account AccountDetails) error {
 	return a.SendEvent("config", a.config)
 }
 
-// TODO - multiple Twitter accounts would require multiple APIs (or switching between)... (just using one for now)
+// TODO maybe - multiple Twitter accounts would require multiple APIs (or switching between)... (just using one for now)
 
 func (a *TwitterApp) InitTwitterAPI(account AccountDetails) error {
 	anaconda.SetConsumerKey(account.ConsumerKey)
@@ -105,18 +94,21 @@ func (a *TwitterApp) InitTwitterAPI(account AccountDetails) error {
 	return nil
 }
 
-func (a *TwitterApp) PostTweet(tweet string) {
+func (a *TwitterApp) PostTweet(tweet string) error {
 	result, err := a.twitterAPI.PostTweet(tweet, nil)
 	if err != nil {
 		log.Errorf("Error posting Tweet %v", err)
 	}
+	// TODO - probably remove this result logging
 	log.Infof("%v", result)
+	return err
 }
 
-func (a *TwitterApp) PostDirectMessage(message, user string) {
+func (a *TwitterApp) PostDirectMessage(message, user string) error {
 	result, err := a.twitterAPI.PostDMToScreenName(message, user)
 	if err != nil {
 		log.Errorf("Error sending direct message %v", err)
 	}
 	log.Infof("%v", result)
+	return err
 }

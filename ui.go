@@ -97,8 +97,12 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 		if err != nil {
 			return c.error(fmt.Sprintf("Failed to unmarshal delete tweet config request %s: %s", request.Data, err))
 		}
-		// remove tweet from map, save config
+		// remove tweet from map and slice, save config
 		delete(c.app.config.Tweets, values["tweetName"])
+
+		i := indexOf(c.app.config.TweetNames, values["tweetName"])
+		c.app.config.TweetNames = append(c.app.config.TweetNames[:i], c.app.config.TweetNames[i+1:]...)
+
 		c.app.SendEvent("config", c.app.config)
 		return c.listTweets()
 
@@ -132,11 +136,13 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 			values.To = "@" + values.To
 		}
 
-		// add tweet and save config (make new map if no tweets exist yet)
+		// add tweet (map and slice) and save config (make new map &slice if no tweets exist yet)
 		if c.app.config.Tweets == nil {
 			c.app.config.Tweets = make(map[string]TweetDetails)
+			c.app.config.TweetNames = make([]string, 0)
 		}
 		c.app.config.Tweets[values.Name] = values
+		c.app.config.TweetNames = append(c.app.config.TweetNames, values.Name)
 		c.app.SendEvent("config", c.app.config)
 		return c.listTweets()
 
@@ -487,3 +493,13 @@ func (c *ConfigService) confirmDeleteTweet(name string) (*suit.ConfigurationScre
 //	}
 //	return false
 //}
+
+// pos finds the position of a value in a slice, returns -1 if not found
+func indexOf(slice []string, value string) int {
+	for p, v := range slice {
+		if v == value {
+			return p
+		}
+	}
+	return -1
+}

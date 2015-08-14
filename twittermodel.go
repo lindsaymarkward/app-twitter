@@ -1,8 +1,9 @@
 package main
 
 type TwitterAppModel struct {
-	Account AccountDetails          `json:"account"`
-	Tweets  map[string]TweetDetails `json:"tweets"`
+	Account    AccountDetails          `json:"account"`
+	Tweets     map[string]TweetDetails `json:"tweets"`
+	TweetNames []string                `json:"tweetnames"`
 }
 
 // TweetDetails stores the values for one tweet or direct message
