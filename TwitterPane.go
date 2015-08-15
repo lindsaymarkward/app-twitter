@@ -225,15 +225,16 @@ func (p *LEDPane) UpdateStatus() {
 
 func (p *LEDPane) tweetIt(tweet TweetDetails) {
 	var err error
+	message := fmt.Sprintf("%s %d", tweet.Message, tweet.Number)
 	if tweet.To == "" {
 		// post tweet
-		err = p.app.PostTweet(fmt.Sprintf("%s %d", tweet.Message, tweet.Number))
+		err = p.app.PostTweet(message)
 		//		log.Infof(fmt.Sprintf("%s %d", tweet.Message, tweet.Number))
 	} else {
 		// send direct message
-		err = p.app.PostDirectMessage(tweet.Message, tweet.To)
+		err = p.app.PostDirectMessage(message, tweet.To)
 	}
 	// handle error
-	log.Errorf(err)
-	// TODO - this isn't the right error... needs to look at result returned from Twitter
+	log.Errorf(fmt.Sprintf("%v", err))
+	// TODO - this isn't the right error... needs to look at result returned from Twitter (e.g. "you already said that")
 }

@@ -233,16 +233,19 @@ func (c *ConfigService) listAccounts() (*suit.ConfigurationScreen, error) {
 // listTweets is a config screen for displaying tweets with options for editing, deleting and creating new ones
 func (c *ConfigService) listTweets() (*suit.ConfigurationScreen, error) {
 	var tweetOptions []suit.ActionListOption
-	for _, tweet := range c.app.config.Tweets {
-		warning := ""
+	for i, tweetName := range c.app.config.TweetNames {
+		subtitle := ""
+		tweet := c.app.config.Tweets[c.app.config.TweetNames[i]]
 		// create edit actions
 		if len(tweet.Message) > 137 {
-			warning = "TOO LONG!"
+			subtitle = "TOO LONG!"
+		} else if tweet.To != "" {
+			subtitle = "DM"
 		}
 		tweetOptions = append(tweetOptions, suit.ActionListOption{
-			Title:    tweet.Name,
-			Subtitle: warning,
-			Value:    tweet.Name,
+			Title:    fmt.Sprintf("%d-%s", i+1, tweetName),
+			Subtitle: subtitle,
+			Value:    tweetName,
 		})
 	}
 	screen := suit.ConfigurationScreen{
@@ -253,7 +256,7 @@ func (c *ConfigService) listTweets() (*suit.ConfigurationScreen, error) {
 				Contents: []suit.Typed{
 					suit.StaticText{
 						// TODO - could improve this process if needed
-						Value: "To rename a tweet, edit it then delete the one with the old name",
+						Value: "To rename a tweet, edit it, save with a different name, then delete the one with the old name",
 					},
 					suit.ActionList{
 						Name:    "tweetName",
