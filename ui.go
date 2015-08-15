@@ -255,7 +255,6 @@ func (c *ConfigService) listTweets() (*suit.ConfigurationScreen, error) {
 				Title: "Create or Edit Tweets",
 				Contents: []suit.Typed{
 					suit.StaticText{
-						// TODO - could improve this process if needed
 						Value: "To rename a tweet, edit it, save with a different name, then delete the one with the old name",
 					},
 					suit.ActionList{

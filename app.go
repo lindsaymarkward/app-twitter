@@ -1,5 +1,7 @@
 package main
 
+// TODO maybe - multiple Twitter accounts would require multiple APIs (or switching between)... (just using one for now)
+
 import (
 	"fmt"
 
@@ -44,26 +46,23 @@ func (a *TwitterApp) Start(m *TwitterAppModel) error {
 		Schema: "/protocol/configuration",
 	})
 
-	return a.SetupPane()
+	log.Infof("Making new pane for Twitter...")
+	pane := NewLEDPane(a)
+
+	// Export our newly made pane
+	a.led = remote.NewTCPMatrix(pane, fmt.Sprintf("%s:%d", host, port))
+
+	return nil
 }
 
-// Stop
+// Stop the app - sort of, not really
 func (a *TwitterApp) Stop() error {
 	return nil
 }
 
-func (a *TwitterApp) SetupPane() error {
-	log.Infof("Making new pane...")
-	// The pane must implement the remote.pane interface
-	pane := NewLEDPane(a)
-
-	// Export our pane over the TCP connection we just made
-	a.led = remote.NewTCPMatrix(pane, fmt.Sprintf("%s:%d", host, port))
-	return nil
-}
-
+// SaveAccount saves the account to the config and initialises the Twitter API
 func (a *TwitterApp) SaveAccount(account AccountDetails) error {
-	log.Infof("Saving username %v\n", account.Username)
+	log.Infof("Saving account with username %v\n", account.Username)
 
 	// for multiple accounts...
 	//	if a.config.Accounts == nil {
@@ -77,8 +76,7 @@ func (a *TwitterApp) SaveAccount(account AccountDetails) error {
 	return a.SendEvent("config", a.config)
 }
 
-// TODO maybe - multiple Twitter accounts would require multiple APIs (or switching between)... (just using one for now)
-
+// InitTwitterAPI creates a new Twitter API object using the account details
 func (a *TwitterApp) InitTwitterAPI(account AccountDetails) error {
 	anaconda.SetConsumerKey(account.ConsumerKey)
 	anaconda.SetConsumerSecret(account.ConsumerSecret)
@@ -89,26 +87,27 @@ func (a *TwitterApp) InitTwitterAPI(account AccountDetails) error {
 		a.Initialised = false
 		return err
 	}
-	log.Infof("Initialised Twitter API with self: %v", user.ScreenName)
+	log.Infof("Initialised Twitter API with username: %v", user.ScreenName)
 	a.Initialised = true
 	return nil
 }
 
-func (a *TwitterApp) PostTweet(tweet string) error {
-	result, err := a.twitterAPI.PostTweet(tweet, nil)
+// PostTweet sends message as a regular public tweet
+func (a *TwitterApp) PostTweet(message string) error {
+	_, err := a.twitterAPI.PostTweet(message, nil)
 	if err != nil {
-		log.Errorf("Error posting Tweet %v", err)
+		log.Errorf("Error posting Tweet: %v", err)
+//		log.Infof("Twitter API result: %#v", result)
 	}
-	// TODO - probably remove this result logging
-	log.Infof("%v", result)
 	return err
 }
 
+// PostDirectMessage sends message to user as a direct message
 func (a *TwitterApp) PostDirectMessage(message, user string) error {
-	result, err := a.twitterAPI.PostDMToScreenName(message, user)
+	_, err := a.twitterAPI.PostDMToScreenName(message, user)
 	if err != nil {
-		log.Errorf("Error sending direct message %v", err)
+		log.Errorf("Error sending direct message: %v", err)
+//		log.Infof("Twitter API result: %#v", result)
 	}
-	log.Infof("%v", result)
 	return err
 }
