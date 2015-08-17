@@ -1,6 +1,6 @@
 package main
 
-// TODO maybe - multiple Twitter accounts would require multiple APIs (or switching between)... (just using one for now)
+// TODO - Ninja channels stuff so this can be used by other apps/drivers
 
 import (
 	"fmt"
@@ -17,6 +17,7 @@ var info = ninja.LoadModuleInfo("./package.json")
 var host = config.String("localhost", "led.host")
 var port = config.Int(3115, "led.remote.port")
 
+// TwitterApp stores the app's core details including the Initialised boolean for whether authentication (API) worked
 type TwitterApp struct {
 	support.AppSupport
 	led         *remote.Matrix
@@ -25,14 +26,14 @@ type TwitterApp struct {
 	Initialised bool
 }
 
-// Start is called after the ExportApp call is complete.
+// Start the app, set up Twitter API, create LED pane
 func (a *TwitterApp) Start(m *TwitterAppModel) error {
 	log.Infof("Starting Twitter app with config: %v", m)
 	a.config = m
 
 	// for clearing tweets (testing)
-//	a.config.TweetNames = nil
-//	a.config.Tweets = nil
+	//	a.config.TweetNames = nil
+	//	a.config.Tweets = nil
 
 	// initialise Twitter API and set Initialised state (don't try if account isn't set)
 	if a.config.Account.Username != "" {
@@ -97,7 +98,7 @@ func (a *TwitterApp) PostTweet(message string) error {
 	_, err := a.twitterAPI.PostTweet(message, nil)
 	if err != nil {
 		log.Errorf("Error posting Tweet: %v", err)
-//		log.Infof("Twitter API result: %#v", result)
+		//		log.Infof("Twitter API result: %#v", result)
 	}
 	return err
 }
@@ -107,7 +108,7 @@ func (a *TwitterApp) PostDirectMessage(message, user string) error {
 	_, err := a.twitterAPI.PostDMToScreenName(message, user)
 	if err != nil {
 		log.Errorf("Error sending direct message: %v", err)
-//		log.Infof("Twitter API result: %#v", result)
+		//		log.Infof("Twitter API result: %#v", result)
 	}
 	return err
 }

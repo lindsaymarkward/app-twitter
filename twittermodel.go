@@ -1,5 +1,6 @@
 package main
 
+// TwitterAppModel stores the details for an account and the stored tweets
 type TwitterAppModel struct {
 	Account    AccountDetails          `json:"account"`
 	Tweets     map[string]TweetDetails `json:"tweets"`
@@ -15,6 +16,8 @@ type TweetDetails struct {
 	Number  int    `json:"number,string"`
 }
 
+// AccountDetails stores the authentication details for one user
+// (get these from Twitter website, see README)
 type AccountDetails struct {
 	Username          string `json:"username"`
 	ConsumerKey       string `json:"consumerkey"`

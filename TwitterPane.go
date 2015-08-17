@@ -1,5 +1,7 @@
 package main
 
+// TODO - scrolling text for tweet name / messages?
+
 import (
 	"image"
 	"image/color"
@@ -13,13 +15,10 @@ import (
 	"github.com/ninjasphere/sphere-go-led-controller/util"
 )
 
-// TODO maybe - scrolling text for tweet name / messages?
-// TODO - start timer on tap, stop it on double-tap, do tap action if it fires
-
 var tapInterval = time.Millisecond * 450
 var updateFrequency = time.Second * 2
 
-// states
+// app states
 const (
 	ErrorAccount = iota
 	Choosing
@@ -28,7 +27,7 @@ const (
 	TweetSucceeded
 )
 
-// load state images
+// state images
 var images map[string]util.Image
 
 // init runs before anything else, and loads the images for the LED pane
@@ -163,21 +162,13 @@ func (p *LEDPane) Render() (*image.RGBA, error) {
 		draw.Draw(img, img.Bounds(), images["tick"].GetNextFrame(), image.Point{0, 0}, draw.Over)
 		O4b03b.Font.DrawString(img, 6, 3, fmt.Sprintf("%d", p.currentTweetNumber+1), color.RGBA{255, 255, 255, 255})
 	case TweetFailed:
-		// bird with animated cross through it
+		// bird with animated cross through it and tweet number
 		draw.Draw(img, img.Bounds(), images["logo"].GetNextFrame(), image.Point{0, 0}, draw.Over)
 		draw.Draw(img, img.Bounds(), images["error"].GetNextFrame(), image.Point{0, 0}, draw.Over)
 		O4b03b.Font.DrawString(img, 6, 3, fmt.Sprintf("%d", p.currentTweetNumber+1), color.RGBA{255, 255, 255, 255})
 	}
 	// return the image we've created to be rendered to the matrix
 	return img, nil
-}
-
-// drawText is a helper function to draw a string of text into an image
-// this actually draws black to determine width, then aligns to the right
-func drawText(text string, col color.RGBA, top int, img *image.RGBA) {
-	width := O4b03b.Font.DrawString(img, 0, 8, text, color.Black)
-	start := int(16 - width - 1)
-	O4b03b.Font.DrawString(img, start, top, text, col)
 }
 
 // UpdateStatus (regularly) checks the account (API) initialisation status and number of tweets stored
@@ -218,7 +209,6 @@ func (p *LEDPane) tweetIt() {
 	// stop the regular status updating while we tweet and handle success/failure
 	p.updateTimer.Stop()
 	p.state = Tweeting
-	// TODO - timer for tweeting that animates until result determined - tick or cross for success or fail
 
 	tweet := p.app.config.Tweets[p.app.config.TweetNames[p.currentTweetNumber]]
 	tweet.Number += 1

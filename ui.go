@@ -1,5 +1,8 @@
 package main
 
+// TODO - (if useful) make config handle multiple accounts... would require multiple APIs (or switching between)... (just using one for now)
+// TODO - make option for resetting number (rename to tweet count)
+
 import (
 	"encoding/json"
 	"fmt"
@@ -8,8 +11,7 @@ import (
 	"github.com/ninjasphere/go-ninja/suit"
 )
 
-// TODO: (if useful) make config handle multiple accounts
-
+// ConfigService contains a reference to the app and the methods for configuration through Labs
 type ConfigService struct {
 	app *TwitterApp
 }
@@ -174,7 +176,7 @@ func (c *ConfigService) error(message string) (*suit.ConfigurationScreen, error)
 	}, nil
 }
 
-// list is a config screen for displaying accounts with options for editing, deleting and controlling
+// listAccounts is a config screen for displaying accounts with options for editing, deleting and controlling
 func (c *ConfigService) listAccounts() (*suit.ConfigurationScreen, error) {
 	subtitle := ""
 	if !c.app.Initialised {
@@ -295,6 +297,7 @@ func (c *ConfigService) listTweets() (*suit.ConfigurationScreen, error) {
 	return &screen, nil
 }
 
+// editTweet is a config screen for editing tweets
 func (c *ConfigService) editTweet(tweetName string) (*suit.ConfigurationScreen, error) {
 	tweet := TweetDetails{}
 	title := "New Tweet/Message"
@@ -349,14 +352,8 @@ func (c *ConfigService) editTweet(tweetName string) (*suit.ConfigurationScreen, 
 	return &screen, nil
 }
 
-// editAccount is a config screen for editing the config of a Twitter Account
+// editAccount is a config screen for editing or creating details for a Twitter Account
 func (c *ConfigService) editAccount(config *TwitterAppModel) (*suit.ConfigurationScreen, error) {
-	//	var cancelClose := &suit.Typed{
-	//		suit.ReplyAction{
-	//			Label: "Cancel",
-	//			Name:  "listAccounts",
-	//		},
-	//	}
 	var title string
 	if config.Account.Username != "" {
 		title = "Editing Twitter Account"
@@ -452,7 +449,7 @@ func (c *ConfigService) confirmDeleteAccount(id string) (*suit.ConfigurationScre
 	}, nil
 }
 
-// confirmDeleteAccount is a config screen for confirming/cancelling deleting of a stored tweet/message
+// confirmDeleteTweet is a config screen for confirming/cancelling deleting of a stored tweet/message
 func (c *ConfigService) confirmDeleteTweet(name string) (*suit.ConfigurationScreen, error) {
 	return &suit.ConfigurationScreen{
 		Sections: []suit.Section{
@@ -487,16 +484,7 @@ func (c *ConfigService) confirmDeleteTweet(name string) (*suit.ConfigurationScre
 	}, nil
 }
 
-//func contains(s []string, e string) bool {
-//	for _, a := range s {
-//		if a == e {
-//			return true
-//		}
-//	}
-//	return false
-//}
-
-// pos finds the position of a value in a slice, returns -1 if not found
+// indexOf finds the position of a value in a slice, returns -1 if not found
 func indexOf(slice []string, value string) int {
 	for p, v := range slice {
 		if v == value {
