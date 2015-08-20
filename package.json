@@ -1,7 +1,7 @@
 {
   "id": "lindsaymarkward.app-twitter",
-  "name": "Ninja Sphere Twitter App",
-  "version": "0.1.0",
+  "name": "app-twitter",
+  "version": "0.2.0",
   "description": "Ninja Sphere Twitter App",
   "main": "app-twitter",
   "scripts": {

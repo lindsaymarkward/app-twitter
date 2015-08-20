@@ -10,6 +10,8 @@ import (
 
 	"fmt"
 
+	"net/url"
+
 	"github.com/ninjasphere/gestic-tools/go-gestic-sdk"
 	"github.com/ninjasphere/sphere-go-led-controller/fonts/O4b03b"
 	"github.com/ninjasphere/sphere-go-led-controller/util"
@@ -17,6 +19,7 @@ import (
 
 var tapInterval = time.Millisecond * 450
 var updateFrequency = time.Second * 2
+var checkTweetsFrequency = time.Second * 6 // TODO - make this config setting (ui.go)
 
 // app states
 const (
@@ -25,6 +28,7 @@ const (
 	Tweeting
 	TweetFailed
 	TweetSucceeded
+	NewMessage
 )
 
 // state images
@@ -42,6 +46,7 @@ func init() {
 
 // LEDPane stores the data we want to access
 type LEDPane struct {
+	lastMessageTime      time.Time
 	lastTap              time.Time
 	lastDoubleTap        time.Time
 	lastTapLocation      gestic.Location
@@ -54,12 +59,14 @@ type LEDPane struct {
 	currentTweetNumber   int
 	updateTimer          *time.Timer
 	tapTimer             *time.Timer
+	checkTweetsTimer     *time.Timer
 }
 
 // NewLEDPane creates an LEDPane with the data and timers initialised
 // the app is passed in so that the pane can access the data and methods in it
 func NewLEDPane(a *TwitterApp) *LEDPane {
 	p := &LEDPane{
+		lastMessageTime: time.Now(),
 		lastTap:         time.Now(),
 		lastDoubleTap:   time.Now(),
 		app:             a,
@@ -69,6 +76,7 @@ func NewLEDPane(a *TwitterApp) *LEDPane {
 
 	p.updateTimer = time.AfterFunc(0, p.UpdateStatus)
 	p.tapTimer = time.AfterFunc(0, p.TapAction)
+	p.checkTweetsTimer = time.AfterFunc(0, p.CheckTweets)
 	return p
 }
 
@@ -166,6 +174,11 @@ func (p *LEDPane) Render() (*image.RGBA, error) {
 		draw.Draw(img, img.Bounds(), images["logo"].GetNextFrame(), image.Point{0, 0}, draw.Over)
 		draw.Draw(img, img.Bounds(), images["error"].GetNextFrame(), image.Point{0, 0}, draw.Over)
 		O4b03b.Font.DrawString(img, 6, 3, fmt.Sprintf("%d", p.currentTweetNumber+1), color.RGBA{255, 255, 255, 255})
+	case NewMessage:
+		// TODO - change to better image - animated new message; change update delay
+		draw.Draw(img, img.Bounds(), images["logo"].GetNextFrame(), image.Point{0, 0}, draw.Over)
+		O4b03b.Font.DrawString(img, 1, 3, "NEW", color.RGBA{20, 255, 250, 255})
+		O4b03b.Font.DrawString(img, 3, 10, "DM", color.RGBA{20, 255, 250, 255})
 	}
 	// return the image we've created to be rendered to the matrix
 	return img, nil
@@ -199,6 +212,45 @@ func (p *LEDPane) TapAction() {
 	p.currentTweetNumber %= p.numberOfTweets
 	if p.currentTweetNumber < 0 {
 		p.currentTweetNumber = p.numberOfTweets - 1
+	}
+}
+
+// CheckTweets (regularly) checks for new tweets/messages - that match desired search
+// ?? maybe have one for messages, one for search tweets
+func (p *LEDPane) CheckTweets() {
+	log.Infof("checking at %v... last message at %v", time.Now(), p.lastMessageTime)
+	// use defer to call timer so it happens after Twitter check is finished
+	defer p.checkTweetsTimer.Reset(checkTweetsFrequency)
+
+	// TODO - use channel and have a timeout for this (20 seconds)
+	// get one direct message
+	v := url.Values{}
+	v.Set("count", "1")
+	messages, err := p.app.twitterAPI.GetDirectMessages(v)
+	if err != nil {
+		log.Errorf("Error getting messages: %v", err)
+		return
+	}
+	if len(messages) == 0 {
+		return
+	}
+	// should be one message
+	message := messages[0]
+	timeOfMessage, err := time.Parse(time.RubyDate, message.CreatedAt)
+	if err != nil {
+		log.Errorf("Time conversion error: %v", err)
+	} else {
+		timeOfMessage = timeOfMessage.Local()
+		//		log.Infof("Most recent message from %v: %v at %v", message.SenderScreenName, message.Text, message.CreatedAt)
+		if timeOfMessage.After(p.lastMessageTime) {
+			// TODO - maybe refactor this into a new function (depends what else is involved)
+			log.Infof("New message from %v: %v at %v", message.SenderScreenName, message.Text, message.CreatedAt)
+			//			log.Infof("Last message was at %v", p.lastMessageTime)
+			p.lastMessageTime = timeOfMessage
+			p.state = NewMessage
+			// set longer timer to display new message icon
+			p.updateTimer.Reset(updateFrequency * 3)
+		}
 	}
 }
 

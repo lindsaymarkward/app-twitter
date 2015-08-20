@@ -7,7 +7,7 @@ FILENAME=${APPNAME}.tar.gz
 
 echo "This script will download, install and run ${APPNAME}"
 #sudo with-rw bash
-cd /sphere/user-autostart/${LOCATION}
+cd /data/sphere/user-autostart/${LOCATION}
 eval wget https://github.com/lindsaymarkward/${APPNAME}/releases/download/${VERSION}/${FILENAME}
 mkdir ${APPNAME}
 tar -xf ${FILENAME} -C ${APPNAME}
