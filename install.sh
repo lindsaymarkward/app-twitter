@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 APPNAME="app-twitter"
-VERSION="0.1.0"
+VERSION="v0.1.0"
 LOCATION="apps"
 FILENAME=${APPNAME}.tar.gz
 

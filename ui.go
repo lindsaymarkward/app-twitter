@@ -1,7 +1,6 @@
 package main
 
-// TODO - (if useful) make config handle multiple accounts... would require multiple APIs (or switching between)... (just using one for now)
-// TODO - make option for resetting number (rename to tweet count)
+// TODO - make option for checking for messages / #tags, @mentions...
 
 import (
 	"encoding/json"
@@ -123,9 +122,9 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 		return c.editTweet(values["tweetName"])
 
 	case "saveTweet":
-		var values TweetDetails
+		var tweetValues TweetDetails
 		//		var result
-		err := json.Unmarshal(request.Data, &values)
+		err := json.Unmarshal(request.Data, &tweetValues)
 		if err != nil {
 			return c.error(fmt.Sprintf("Failed to unmarshal save config request %s: %s", request.Data, err))
 		}
@@ -134,17 +133,18 @@ func (c *ConfigService) Configure(request *model.ConfigurationRequest) (*suit.Co
 		// So we just label it when displaying it
 
 		// check and add @ to To field if needed
-		if len(values.To) > 0 && values.To[0] != '@' {
-			values.To = "@" + values.To
+		if len(tweetValues.To) > 0 && tweetValues.To[0] != '@' {
+			tweetValues.To = "@" + tweetValues.To
 		}
-
+		// reset tweet counter (should be safe unless people edit after sending the first one)
+		tweetValues.TimesSent = 0
 		// add tweet (map and slice) and save config (make new map &slice if no tweets exist yet)
 		if c.app.config.Tweets == nil {
 			c.app.config.Tweets = make(map[string]TweetDetails)
 			c.app.config.TweetNames = make([]string, 0)
 		}
-		c.app.config.Tweets[values.Name] = values
-		c.app.config.TweetNames = append(c.app.config.TweetNames, values.Name)
+		c.app.config.Tweets[tweetValues.Name] = tweetValues
+		c.app.config.TweetNames = append(c.app.config.TweetNames, tweetValues.Name)
 		c.app.SendEvent("config", c.app.config)
 		return c.listTweets()
 
@@ -331,7 +331,7 @@ func (c *ConfigService) editTweet(tweetName string) (*suit.ConfigurationScreen, 
 					},
 					suit.InputHidden{
 						Name:  "number",
-						Value: fmt.Sprintf("%d", tweet.Number),
+						Value: fmt.Sprintf("%d", tweet.TimesSent),
 					},
 				},
 			},
@@ -395,13 +395,18 @@ func (c *ConfigService) editAccount(config *TwitterAppModel) (*suit.Configuratio
 						Before: "Access Token Secret",
 						Value:  config.Account.AccessTokenSecret,
 					},
+//					suit.InputText{
+//						Name:   "checktweetsfrequency",
+//						Before: "Check tweets/DMs every",
+//						Placeholder: "in seconds",
+//						Value:  config.CheckTweetsFrequency,
+//					},
 				},
 			},
 		},
 		Actions: []suit.Typed{
 			suit.CloseAction{
 				Label: "Close",
-				//				Name:  "listAccounts",
 			},
 			suit.ReplyAction{
 				Label:        "Save",

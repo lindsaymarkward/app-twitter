@@ -17,9 +17,9 @@ import (
 	"github.com/ninjasphere/sphere-go-led-controller/util"
 )
 
-var tapInterval = time.Millisecond * 450
-var updateFrequency = time.Second * 2
-var checkTweetsFrequency = time.Second * 6 // TODO - make this config setting (ui.go)
+var doubleTapDelay = time.Millisecond * 450 // time between taps (less than this is a double-tap)
+var updateDelay = time.Second * 2
+var checkTweetsDelay time.Duration // TODO - make this config setting (ui.go)
 
 // app states
 const (
@@ -60,6 +60,7 @@ type LEDPane struct {
 	updateTimer          *time.Timer
 	tapTimer             *time.Timer
 	checkTweetsTimer     *time.Timer
+	keepAwake            bool
 }
 
 // NewLEDPane creates an LEDPane with the data and timers initialised
@@ -71,12 +72,15 @@ func NewLEDPane(a *TwitterApp) *LEDPane {
 		lastDoubleTap:   time.Now(),
 		app:             a,
 		hasStoredTweets: false,
+		keepAwake:       false,
 		numberOfTweets:  1, // to avoid divide by zero error the first time it's run
 	}
 
+	checkTweetsDelay = time.Second * time.Duration(p.app.config.CheckTweetsFrequency)
+
 	p.updateTimer = time.AfterFunc(0, p.UpdateStatus)
 	p.tapTimer = time.AfterFunc(0, p.TapAction)
-	p.checkTweetsTimer = time.AfterFunc(0, p.CheckTweets)
+	//	p.checkTweetsTimer = time.AfterFunc(0, p.CheckTweets)
 	return p
 }
 
@@ -89,7 +93,7 @@ func (p *LEDPane) Gesture(gesture *gestic.GestureMessage) {
 	lastLocation := p.lastTapLocation
 	p.lastTapLocation = gesture.Touch
 
-	if gesture.Tap.Active() && time.Since(p.lastTap) > tapInterval {
+	if gesture.Tap.Active() && time.Since(p.lastTap) > doubleTapDelay {
 		p.lastTap = time.Now()
 		log.Infof("Tap! %v", lastLocation)
 
@@ -97,17 +101,20 @@ func (p *LEDPane) Gesture(gesture *gestic.GestureMessage) {
 		if p.state == Choosing && p.hasStoredTweets {
 			// start timer that will be stopped if double tap happens in time
 			// this avoids the problem of the first tap of a double being actioned as a tap
-			p.tapTimer.Reset(tapInterval)
+			p.tapTimer.Reset(doubleTapDelay)
 			// change between images - right or left
 			if lastLocation.West && !lastLocation.East {
 				p.changeTweetDirection = -1
 			} else {
 				p.changeTweetDirection = 1
 			}
+		} else if p.state == NewMessage {
+			p.state = Choosing
+			p.updateTimer.Reset(updateDelay)
 		}
 	}
 
-	if gesture.DoubleTap.Active() && time.Since(p.lastDoubleTap) > tapInterval {
+	if gesture.DoubleTap.Active() && time.Since(p.lastDoubleTap) > doubleTapDelay {
 		p.lastDoubleTap = time.Now()
 		log.Infof("Double Tap!")
 		if p.state == Choosing {
@@ -117,6 +124,7 @@ func (p *LEDPane) Gesture(gesture *gestic.GestureMessage) {
 			// ("WARNING matrix RemoteMatrix.go:70 Lost connection to led controller: EOF")
 			//		go p.app.PostDirectMessage("Nice one? I hope so!", "@lindsaymarkward")
 
+			// TODO - use channel and have a timeout for this (10 seconds?)
 			go p.tweetIt()
 		}
 	}
@@ -124,7 +132,7 @@ func (p *LEDPane) Gesture(gesture *gestic.GestureMessage) {
 
 // KeepAwake sets whether the display fades after 30 seconds (false) or stays on (true)
 func (p *LEDPane) KeepAwake() bool {
-	return false
+	return p.keepAwake
 }
 
 // IsEnabled is needed as it's part of the remote.pane interface
@@ -175,7 +183,7 @@ func (p *LEDPane) Render() (*image.RGBA, error) {
 		draw.Draw(img, img.Bounds(), images["error"].GetNextFrame(), image.Point{0, 0}, draw.Over)
 		O4b03b.Font.DrawString(img, 6, 3, fmt.Sprintf("%d", p.currentTweetNumber+1), color.RGBA{255, 255, 255, 255})
 	case NewMessage:
-		// TODO - change to better image - animated new message; change update delay
+		// TODO - change to better image - animated new message
 		draw.Draw(img, img.Bounds(), images["logo"].GetNextFrame(), image.Point{0, 0}, draw.Over)
 		O4b03b.Font.DrawString(img, 1, 3, "NEW", color.RGBA{20, 255, 250, 255})
 		O4b03b.Font.DrawString(img, 3, 10, "DM", color.RGBA{20, 255, 250, 255})
@@ -196,14 +204,14 @@ func (p *LEDPane) UpdateStatus() {
 		if p.numberOfTweets == 0 {
 			p.currentTweetNumber = -1
 			p.hasStoredTweets = false
-		} else if p.hasStoredTweets == false {
+		} else if !p.hasStoredTweets {
 			// this is the first update where there are now stored tweets
 			p.currentTweetNumber = 0
 			p.hasStoredTweets = true
 		}
 	}
 	//	log.Infof("update. State is %v", p.state)
-	p.updateTimer.Reset(updateFrequency)
+	p.updateTimer.Reset(updateDelay)
 }
 
 // TapAction changes to the next/previous stored tweet (run on a timer when tapped)
@@ -218,11 +226,15 @@ func (p *LEDPane) TapAction() {
 // CheckTweets (regularly) checks for new tweets/messages - that match desired search
 // ?? maybe have one for messages, one for search tweets
 func (p *LEDPane) CheckTweets() {
-	log.Infof("checking at %v... last message at %v", time.Now(), p.lastMessageTime)
 	// use defer to call timer so it happens after Twitter check is finished
-	defer p.checkTweetsTimer.Reset(checkTweetsFrequency)
+	//	defer p.checkTweetsTimer.Reset(checkTweetsDelay)
+	// don't check messages if API is not initialised
+	if !p.app.Initialised {
+		return
+	}
+	log.Infof("checking at %v... last message at %v", time.Now(), p.lastMessageTime)
 
-	// TODO - use channel and have a timeout for this (20 seconds)
+	// TODO - use channel and have a timeout for this (20 seconds?)
 	// get one direct message
 	v := url.Values{}
 	v.Set("count", "1")
@@ -243,13 +255,14 @@ func (p *LEDPane) CheckTweets() {
 		timeOfMessage = timeOfMessage.Local()
 		//		log.Infof("Most recent message from %v: %v at %v", message.SenderScreenName, message.Text, message.CreatedAt)
 		if timeOfMessage.After(p.lastMessageTime) {
+			// we have a new message!
 			// TODO - maybe refactor this into a new function (depends what else is involved)
 			log.Infof("New message from %v: %v at %v", message.SenderScreenName, message.Text, message.CreatedAt)
 			//			log.Infof("Last message was at %v", p.lastMessageTime)
 			p.lastMessageTime = timeOfMessage
 			p.state = NewMessage
 			// set longer timer to display new message icon
-			p.updateTimer.Reset(updateFrequency * 3)
+			p.updateTimer.Reset(updateDelay * 3)
 		}
 	}
 }
@@ -262,15 +275,12 @@ func (p *LEDPane) tweetIt() {
 	p.updateTimer.Stop()
 	p.state = Tweeting
 
+	// TODO - channel here, I think
+
 	tweet := p.app.config.Tweets[p.app.config.TweetNames[p.currentTweetNumber]]
-	tweet.Number += 1
-	// update config to update this number (to avoid Twitter rejecting duplicate tweets/messages)
-	p.app.config.Tweets[p.app.config.TweetNames[p.currentTweetNumber]] = tweet
-	p.app.SendEvent("config", p.app.config)
+	log.Infof("Tweeting: %v to %v (%v)", tweet.Message, tweet.To, tweet.TimesSent)
 
-	log.Infof("Tweeting: %v to %v (%v)", tweet.Message, tweet.To, tweet.Number)
-
-	message := fmt.Sprintf("%s %d", tweet.Message, tweet.Number)
+	message := fmt.Sprintf("%s %d", tweet.Message, tweet.TimesSent)
 	if tweet.To == "" {
 		// post tweet
 		err = p.app.PostTweet(message)
@@ -284,7 +294,12 @@ func (p *LEDPane) tweetIt() {
 		p.state = TweetFailed
 	} else {
 		p.state = TweetSucceeded
+		// update config to update and store number (to avoid Twitter rejecting duplicate tweets/messages)
+		tweet.TimesSent += 1
+		p.app.config.Tweets[p.app.config.TweetNames[p.currentTweetNumber]] = tweet
+		p.app.SendEvent("config", p.app.config)
+
 	}
 	// reset usual timer which will set state (so it displays success/fail for 2 seconds)
-	p.updateTimer.Reset(updateFrequency)
+	p.updateTimer.Reset(updateDelay)
 }

@@ -20,20 +20,26 @@ var port = config.Int(3115, "led.remote.port")
 // TwitterApp stores the app's core details including the Initialised boolean for whether authentication (API) worked
 type TwitterApp struct {
 	support.AppSupport
-	led         *remote.Matrix
-	config      *TwitterAppModel
-	twitterAPI  *anaconda.TwitterApi
-	Initialised bool
+	led            *remote.Matrix
+	config         *TwitterAppModel
+	twitterAPI     *anaconda.TwitterApi
+	Initialised    bool
 }
 
 // Start the app, set up Twitter API, create LED pane
 func (a *TwitterApp) Start(m *TwitterAppModel) error {
 	log.Infof("Starting Twitter app with config: %v", m)
-	a.config = m
+	if m != nil {
+		a.config = m
+	} else {
+		a.config =&TwitterAppModel{ }
+	}
+	// TODO - (temporary solution) - configure update tweets frequency
+	a.config.CheckTweetsFrequency = 8
 
 	// for clearing tweets (testing)
-	//	a.config.TweetNames = nil
-	//	a.config.Tweets = nil
+//		a.config.TweetNames = nil
+//		a.config.Tweets = nil
 
 	// initialise Twitter API and set Initialised state (don't try if account isn't set)
 	if a.config.Account.Username != "" {
