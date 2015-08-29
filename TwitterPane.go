@@ -280,7 +280,8 @@ func (p *LEDPane) tweetIt() {
 	tweet := p.app.config.Tweets[p.app.config.TweetNames[p.currentTweetNumber]]
 	log.Infof("Tweeting: %v to %v (%v)", tweet.Message, tweet.To, tweet.TimesSent)
 
-	message := fmt.Sprintf("%s %d", tweet.Message, tweet.TimesSent)
+	//	message := fmt.Sprintf("%s %d", tweet.Message, tweet.TimesSent)
+	message := fmt.Sprintf("%d %d", tweet.TimesSent, tweet.Message)
 	if tweet.To == "" {
 		// post tweet
 		err = p.app.PostTweet(message)
